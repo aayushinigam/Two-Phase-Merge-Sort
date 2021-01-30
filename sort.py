@@ -2,6 +2,7 @@ import os
 import sys
 import math
 from operator import itemgetter
+import heapq
 
 metadata = {}   # {column name : column size,index}
 isThreading = False  #check if the program has to run using threads 
@@ -10,27 +11,32 @@ FACTOR = 1048576  #value of 2^20 - to convert MB to bytes
 #here record implies tuples
 
 
+class minHeapNode:
 
-def buildMinHeap(array,n) :
-	for i in range(n/2-1,0) :
-		minHeapify(array,n,i)
+	def __init__(self,cols_to_sort_indices,sorting_order,row,file_pointer):
+		self.cols_to_sort_indices = cols_to_sort_indices
+		self.sorting_order = sorting_order
+		self.row = row
+		self.file_pointer = file_pointer
 
 
+	def __lt__(self,other) :
 
-def minHeapify(array,n,i) :
-	largest = i
-	left = 2*i 
-	rigt = 2*i + 1
+		#for ascending order
+		if(self.sorting_order == 'asc') :
+			for i in self.cols_to_sort_indices :
+				if(self.row[i] < other.row[i]) :
+					return True
+				if(self.row[i] > other.row[i]) :
+					return False
 
-	if(array[left] > array[largest]) :
-		largest = left
-	if(array[right] > array[largest]) :
-		largest = right
-	if(largest != i) :
-		array[largest],array[i] = array[i],array[largest]
-		minHeapify(array,n,largest) 
-	
-
+		#for descending order
+		else :
+			for i in self.cols_to_sort_indices :
+				if(self.row[i] < other.row[i]) :
+					return False
+				if(self.row[i] > other.row[i]) :
+					return True
 
 
 
@@ -55,26 +61,30 @@ def getMetaData() :
 
 
 
-def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices) :
 
-	subfiles = []
+
+def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_order) :
+
+	outfile = open(output_file,'w')
+
+	subfiles = []         #list of file pointers
+	intial_data = []
+	mergelist = []		
+
+	#build intial heap with first line of every file
 	for i in range(0,num_of_subfiles) :
 		file_name = "subfile" + i + ".txt"
 		subfile = open(file_name,"r")
 		subfiles.append(subfile)
+		temp_data = subfile.readline().strip()
+		temp_data = temp_data.split('  ')
+		node = minHeapNode(cols_to_sort_indices,sorting_order,temp_data)
+		heapq.heappush(mergelist,node)
 
-
-	#create the outfile file
-	with open(output_file,'w') as outfile :
-		for i in range(0,num_of_subfiles) :
-			file_name = "subfile" + i + ".txt"
-			with open(file_name,'r') as subfile :
-				data = subfile.readlines()
-
-
-
-
-
+	closed_file_count = 0
+	while(closed_file_count != len(num_of_subfiles)) :
+		node = heapq.heappop(mergelist)
+		temp_data = node.row
 
 
 
@@ -146,7 +156,7 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 
 
 	#MERGE THESE SUBFILES INTO ONE FILE :
-	phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices)
+	phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_order)
 
 
 
