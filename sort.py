@@ -13,17 +13,17 @@ FACTOR = 1048576  #value of 2^20 - to convert MB to bytes
 
 class minHeapNode:
 
-	def __init__(self,cols_to_sort_indices,sorting_order,row,file_pointer):
+	def __init__(self,cols_to_sort_indices,sorting_order,row,file_name):
 		self.cols_to_sort_indices = cols_to_sort_indices
 		self.sorting_order = sorting_order
 		self.row = row
-		self.file_pointer = file_pointer
+		self.file_name = file_name
 
 
 	def __lt__(self,other) :
 
 		#for ascending order
-		if(self.sorting_order == 'asc') :
+		if(self.sorting_order.lower() == 'asc'):
 			for i in self.cols_to_sort_indices :
 				if(self.row[i] < other.row[i]) :
 					return True
@@ -54,9 +54,9 @@ def getMetaData() :
 				index += 1
 			total_columns = len(metadata)
 
-	except (OSError,IOError) as e:
-		print(p)
-		sys.exit(0)
+	except (OSError,IOError) as e: 
+		print(e) 
+		sys.exit(0) 
 	return record_size
 
 
@@ -65,32 +65,76 @@ def getMetaData() :
 
 def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_order) :
 
+	print("##Phase 2 execution begins...")
+
 	outfile = open(output_file,'w')
 
-	subfiles = []         #list of file pointers
+
+	subfiles = {}         #list of file pointers
 	intial_data = []
 	mergelist = []		
 
 	#build intial heap with first line of every file
 	for i in range(0,num_of_subfiles) :
-		file_name = "subfile" + i + ".txt"
+		file_name = "subfile" + str(i+1) + ".txt"
 		subfile = open(file_name,"r")
-		subfiles.append(subfile)
+		subfiles[file_name] = subfile
 		temp_data = subfile.readline().strip()
 		temp_data = temp_data.split('  ')
-		node = minHeapNode(cols_to_sort_indices,sorting_order,temp_data)
+		node = minHeapNode(cols_to_sort_indices,sorting_order,temp_data,file_name)
 		heapq.heappush(mergelist,node)
 
-	closed_file_count = 0
-	while(closed_file_count != len(num_of_subfiles)) :
+	#node = heapq.heappop(mergelist)
+
+	while(len(mergelist) > 0 ) :
 		node = heapq.heappop(mergelist)
-		temp_data = node.row
+		print("node.row is :" , node.row)
+		print("node file is :", node.file_name)
+
+
+	print("###merging subfiles")
+	#count = 0
+
+	while(len(mergelist) > 0) :
+
+		#get min data from heap
+		node = heapq.heappop(mergelist)
+		#if(count == 0) :
+		#	print(node.file_name)
+		#count += 1
+
+		#write data to output file
+		for i in node.row :
+			outfile.write(str(i) + "  ")
+		outfile.write("\n")
+
+		#add new node to heap
+		temp_data = subfiles[node.file_name].readline()
+		if temp_data :
+			temp_data = temp_data.strip().split("  ")
+			temp_node = minHeapNode(cols_to_sort_indices, sorting_order, temp_data, node.file_name)
+			heapq.heappush(mergelist, temp_node)
+			heapq.heapify(mergelist)
+
+		else :
+			os.remove(node.file_name)
+			del subfiles[node.file_name]
+			#pass'''
+
+
+	outfile.close()
+	print("Finished execution")
+
+
+
 
 
 
 
 
 def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
+
+
 
 	#get meta data 
 	record_size = getMetaData()
@@ -103,7 +147,6 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 			data = inp.readlines()
 			for i in data :
 				total_records += 1
-		print(total_records)
 	except (OSError,IOError) as e:
 		print(e)
 		sys.exit(0)
@@ -114,11 +157,16 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 	
 	#calculate number of records in each file 
 	ram_size = ram_size * FACTOR 
-	subfile_record = ram_size//(record_size)
+	print("ram size",ram_size)
+	subfile_record = ram_size//(record_size+4)
+	print("subfile record",subfile_record)
+	print("total_record", total_records)
 
 	#calculate no of subfiles 
 	num_of_subfiles = math.ceil(total_records/subfile_record)
 	print("Number of subfiles :" , num_of_subfiles)
+
+	print("cols to sort are : ", cols_to_sort_indices)
 
 
 	###SPLITTING THE MAIN FILE AND SORTING EACH SUBFILE
@@ -138,9 +186,10 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 			temp += subfile_record
 
 			#sorting the data
-			print(f"###sorting sublist{i+1}")
-			if(sorting_order == 'asc') :
+			#print(f"###sorting sublist{i+1}")
+			if(sorting_order.lower() == 'asc') :
 				sublist = sorted(sublist,key=itemgetter(*cols_to_sort_indices))
+				#sublist = sorted(sublist,key=itemgetter(0))
 			else :
 				sublist = sorted(sublist,key=itemgetter(*cols_to_sort_indices), reverse=True)
 			file_name = 'subfile' + str(subfile) + '.txt'
@@ -153,6 +202,7 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 						f.write('  ')
 					f.write('\n')
 			subfile += 1
+
 
 
 	#MERGE THESE SUBFILES INTO ONE FILE :
@@ -172,9 +222,15 @@ if __name__ == "__main__" :
 	output_file = sys.argv[2]
 	ram_size = int(sys.argv[3])
 
+
+	#calculate file size :
+	input_file_size = os.stat(input_file).st_size
+	print("Input file size : ", input_file_size)
+
+
 	#WITHOUT THREADING
-	if(sys.argv[4] == 'asc'  or sys.argv[3] == 'desc') :
-		order = sys.argv[5]
+	if(sys.argv[4].lower() == 'asc'  or sys.argv[3].lower() == 'desc') :
+		order = sys.argv[4]
 		temp = 5
 
 	#WITH THREADING
@@ -183,9 +239,11 @@ if __name__ == "__main__" :
 		no_of_threads = sys.argv[3]
 		order = sys.argv[4]
 		temp = 6
-	cols_to_sort = []
+
+	cols_to_sort = []  #stores the names of the cols to be sorted
 	for i in range(temp,len(sys.argv)) :
 		cols_to_sort.append(sys.argv[i])
+
 
 	#Execute phase 1 : 
 	phaseOne(ram_size,input_file,output_file,cols_to_sort,order)
