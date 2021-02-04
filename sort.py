@@ -8,10 +8,12 @@ metadata = {}   # {column name : column size,index}
 isThreading = False  #check if the program has to run using threads 
 total_columns = 0    #total no of columns in in input file
 FACTOR = 1048576  #value of 2^20 - to convert MB to bytes 
+GAP = 2 		  #a gap of 2 bytes(2 spaces) to read a columns from a row in input file
 #here record implies tuples
 
 
-class minHeapNode:
+
+class heapNode:
 
 	def __init__(self,cols_to_sort_indices,sorting_order,row,file_name):
 		self.cols_to_sort_indices = cols_to_sort_indices
@@ -23,20 +25,44 @@ class minHeapNode:
 	def __lt__(self,other) :
 
 		#for ascending order
-		if(self.sorting_order.lower() == 'asc'):
+		if(self.sorting_order == 'asc'):
 			for i in self.cols_to_sort_indices :
-				if(self.row[i] < other.row[i]) :
+				if(self.row[i] == other.row[i]) :
+					continue
+				elif(self.row[i] < other.row[i]) :
 					return True
-				if(self.row[i] > other.row[i]) :
+				else:
 					return False
 
 		#for descending order
 		else :
 			for i in self.cols_to_sort_indices :
-				if(self.row[i] < other.row[i]) :
+				if(self.row[i] == other.row[i]) :
+					continue
+				elif(self.row[i] < other.row[i]) :
 					return False
-				if(self.row[i] > other.row[i]) :
+				else :
 					return True
+		return False
+
+
+def processOneRow(file_data) :
+
+	#emp_file_data = file_data[index]   #take a line/row from file
+	count = 0             
+	temp_count = 0
+	row_data = []
+	#for every col in the row, keep adding the content until the size of the 
+	#column is reached
+	for cols in metadata :
+		st = ''
+		count = temp_count + metadata[cols][0]
+		while(temp_count < count) :           
+			st += file_data[temp_count] 
+			temp_count += 1
+		row_data.append(st)
+		temp_count += 2 #to skip the 2 spaces present between the two columns in the row
+	return row_data
 
 
 
@@ -49,7 +75,7 @@ def getMetaData() :
 			index = 0
 			for i in data :
 				parts = i.strip().split(',')
-				metadata[parts[0]] = [parts[1],index]
+				metadata[parts[0]] = [int(parts[1]),index]
 				record_size += int(parts[1])	
 				index += 1
 			total_columns = len(metadata)
@@ -61,8 +87,6 @@ def getMetaData() :
 
 
 
-
-
 def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_order) :
 
 	print("##Phase 2 execution begins...")
@@ -70,56 +94,73 @@ def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_o
 	outfile = open(output_file,'w')
 
 
-	subfiles = {}         #list of file pointers
+	subfiles = {}  #list of file pointers
 	intial_data = []
-	mergelist = []		
+	mergelist = []	
+	file_end_flag = False	
+
 
 	#build intial heap with first line of every file
 	for i in range(0,num_of_subfiles) :
 		file_name = "subfile" + str(i+1) + ".txt"
 		subfile = open(file_name,"r")
 		subfiles[file_name] = subfile
-		temp_data = subfile.readline().strip()
-		temp_data = temp_data.split('  ')
-		node = minHeapNode(cols_to_sort_indices,sorting_order,temp_data,file_name)
-		heapq.heappush(mergelist,node)
+		subfile_data = subfile.readline()
+
+		#PROCESS  A ROW OF INPUT FILE : 
+		row_data = processOneRow(subfile_data)
+		node = heapNode(cols_to_sort_indices,sorting_order,row_data,file_name)
+		mergelist.append(node)
+
 
 	#node = heapq.heappop(mergelist)
+	if(sorting_order == 'asc') :
+		heapq.heapify(mergelist)
+	else :
+		heapq._heapify_max(mergelist)
 
-	while(len(mergelist) > 0 ) :
-		node = heapq.heappop(mergelist)
+
+	'''while(len(mergelist) > 0 ) :
+		node = heapq._heappop_max(mergelist)
 		print("node.row is :" , node.row)
-		print("node file is :", node.file_name)
+		print("node file is :", node.file_name)'''
 
 
 	print("###merging subfiles")
-	#count = 0
-
 	while(len(mergelist) > 0) :
 
-		#get min data from heap
-		node = heapq.heappop(mergelist)
-		#if(count == 0) :
-		#	print(node.file_name)
-		#count += 1
+		#get root data from heap
+		if(sorting_order == 'asc') :
+			node = heapq.heappop(mergelist)
+		else :
+			node = heapq._heappop_max(mergelist)
 
 		#write data to output file
 		for i in node.row :
 			outfile.write(str(i) + "  ")
 		outfile.write("\n")
 
-		#add new node to heap
-		temp_data = subfiles[node.file_name].readline()
-		if temp_data :
-			temp_data = temp_data.strip().split("  ")
-			temp_node = minHeapNode(cols_to_sort_indices, sorting_order, temp_data, node.file_name)
-			heapq.heappush(mergelist, temp_node)
-			heapq.heapify(mergelist)
+		#get the next line 
+		current_file = subfiles[node.file_name]
+		temp_row_data = current_file.readline()
 
+		#if the line is not empty 
+		if(temp_row_data) :
+			row_data = processOneRow(temp_row_data)
+			temp_node = heapNode(cols_to_sort_indices, sorting_order, row_data, node.file_name)
+			mergelist.append(temp_node)
+			if(sorting_order == 'asc') :
+				heapq.heapify(mergelist)
+			else :
+				heapq._heapify_max(mergelist)
+
+
+		#file has reached its end
 		else :
-			os.remove(node.file_name)
-			del subfiles[node.file_name]
-			#pass'''
+			temp_file_name = node.file_name
+			#os.remove(temp_file_name)
+			del subfiles[temp_file_name]
+			print("Contents of " + temp_file_name.split(".")[0] + " merged to final output")
 
 
 	outfile.close()
@@ -127,15 +168,7 @@ def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_o
 
 
 
-
-
-
-
-
 def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
-
-
-
 	#get meta data 
 	record_size = getMetaData()
 	print("###running phase 1")
@@ -181,13 +214,16 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 				#print(j)
 				if(j == len(data)) :
 					break
-				data_cols = data[j].strip().split('  ')
-				sublist.append(data_cols)
+				
+				#PROCESS  A ROW OF INPUT FILE : 
+				row_data = processOneRow(data[j])
+				sublist.append(row_data)
 			temp += subfile_record
 
+
 			#sorting the data
-			#print(f"###sorting sublist{i+1}")
-			if(sorting_order.lower() == 'asc') :
+			print(f"###sorting sublist{i+1}")
+			if(sorting_order == 'asc') :
 				sublist = sorted(sublist,key=itemgetter(*cols_to_sort_indices))
 				#sublist = sorted(sublist,key=itemgetter(0))
 			else :
@@ -229,15 +265,16 @@ if __name__ == "__main__" :
 
 
 	#WITHOUT THREADING
-	if(sys.argv[4].lower() == 'asc'  or sys.argv[3].lower() == 'desc') :
-		order = sys.argv[4]
+	if(sys.argv[4].lower() == 'asc'  or sys.argv[4].lower() == 'desc') :
+		order = sys.argv[4].lower()
 		temp = 5
+
 
 	#WITH THREADING
 	else :
 		isThreading = True
 		no_of_threads = sys.argv[3]
-		order = sys.argv[4]
+		order = sys.argv[4].lower()
 		temp = 6
 
 	cols_to_sort = []  #stores the names of the cols to be sorted
@@ -247,7 +284,7 @@ if __name__ == "__main__" :
 
 	#Execute phase 1 : 
 	phaseOne(ram_size,input_file,output_file,cols_to_sort,order)
-
+	print(g)
 
 
 
