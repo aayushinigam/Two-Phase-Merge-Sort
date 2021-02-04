@@ -8,9 +8,7 @@ metadata = {}   # {column name : column size,index}
 isThreading = False  #check if the program has to run using threads 
 total_columns = 0    #total no of columns in in input file
 FACTOR = 1048576  #value of 2^20 - to convert MB to bytes 
-GAP = 2 		  #a gap of 2 bytes(2 spaces) to read a columns from a row in input file
 #here record implies tuples
-
 
 
 class heapNode:
@@ -39,7 +37,7 @@ class heapNode:
 			for i in self.cols_to_sort_indices :
 				if(self.row[i] == other.row[i]) :
 					continue
-				elif(self.row[i] < other.row[i]) :
+				elif(self.row[i] > other.row[i]) :
 					return False
 				else :
 					return True
@@ -48,7 +46,7 @@ class heapNode:
 
 def processOneRow(file_data) :
 
-	#emp_file_data = file_data[index]   #take a line/row from file
+	#temp_file_data = file_data[index]   #take a line/row from file
 	count = 0             
 	temp_count = 0
 	row_data = []
@@ -90,6 +88,7 @@ def getMetaData() :
 def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_order) :
 
 	print("##Phase 2 execution begins...")
+	m = 0
 
 	outfile = open(output_file,'w')
 
@@ -134,6 +133,9 @@ def phaseTwo(output_file,ram_size,num_of_subfiles,cols_to_sort_indices,sorting_o
 			node = heapq.heappop(mergelist)
 		else :
 			node = heapq._heappop_max(mergelist)
+			m += 1
+		if(m == 2 or m==1) :
+			print(node.row)
 
 		#write data to output file
 		for i in node.row :
@@ -246,8 +248,6 @@ def phaseOne(ram_size,input_file,output_file,cols_to_sort,sorting_order):
 
 
 
-
-
 #program starts here 
 if __name__ == "__main__" :
 
@@ -284,7 +284,6 @@ if __name__ == "__main__" :
 
 	#Execute phase 1 : 
 	phaseOne(ram_size,input_file,output_file,cols_to_sort,order)
-	print(g)
 
 
 
